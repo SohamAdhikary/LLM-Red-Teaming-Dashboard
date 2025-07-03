@@ -1,0 +1,16 @@
+# Virtual environment
+venv/
+
+# Environment variables
+.env
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Generated data/logs
+red_teaming_campaign_results.csv
+
+# OS generated files
+.DS_Store
+Thumbs.db

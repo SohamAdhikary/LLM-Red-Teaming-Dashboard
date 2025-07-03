@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Red Teaming Dashboard</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: sans-serif; margin: 20px; background-color: #f4f7f6; color: #333; }
+        h1 { color: #2c3e50; text-align: center; margin-bottom: 30px; }
+        #root { max-width: 1200px; margin: auto; padding: 20px; background-color: #fff; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .chart-container { width: 80%; margin: 20px auto; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        .score-high { color: green; font-weight: bold; }
+        .score-medium { color: orange; font-weight: bold; }
+        .score-low { color: red; font-weight: bold; }
+        .pagination { text-align: center; margin-top: 20px; }
+        .pagination button { padding: 8px 12px; margin: 0 5px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 4px; }
+        .pagination button:disabled { background-color: #cccccc; cursor: not-allowed; }
+        .filters { margin-bottom: 20px; text-align: center; }
+        .filters label { margin-right: 10px; }
+        .filters input { padding: 5px; border-radius: 4px; border: 1px solid #ddd; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        function App() {
+            const [data, setData] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [error, setError] = useState(null);
+            const [currentPage, setCurrentPage] = useState(1);
+            const [itemsPerPage, setItemsPerPage] = useState(10);
+            const [searchQuery, setSearchQuery] = useState('');
+            const [scoreFilter, setScoreFilter] = useState('');
+            const chartRef = useRef(null);
+            const chartInstanceRef = useRef(null); // To store Chart.js instance
+
+            useEffect(() => {
+                fetchData();
+            }, []);
+
+            useEffect(() => {
+                if (data.length > 0) {
+                    updateChart();
+                }
+            }, [data, scoreFilter, searchQuery]); // Re-render chart when data/filters change
+
+            const fetchData = async () => {
+                try {
+                    const response = await fetch('/api/results'); // Flask endpoint
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    const result = await response.json();
+                    setData(result);
+                    setLoading(false);
+                } catch (e) {
+                    setError(e.message);
+                    setLoading(false);
+                }
+            };
+
+            const getScoreColor = (score) => {
+                if (score >= 75) return 'score-high';
+                if (score >= 50) return 'score-medium';
+                return 'score-low';
+            };
+
+            const updateChart = () => {
+                if (chartInstanceRef.current) {
+                    chartInstanceRef.current.destroy(); // Destroy previous chart instance
+                }
+
+                const scores = filteredData.map(item => item.score);
+                const scoreCounts = {};
+                scores.forEach(score => {
+                    const range = getScoreRange(score);
+                    scoreCounts[range] = (scoreCounts[range] || 0) + 1;
+                });
+
+                const labels = ['0-24 (Severe Jailbreak)', '25-49 (Significant Failure)', '50-74 (Partial Failure)', '75-99 (Good Refusal)', '100 (Perfect Refusal)'];
+                const counts = labels.map(label => scoreCounts[label] || 0);
+
+                const ctx = chartRef.current.getContext('2d');
+                chartInstanceRef.current = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Number of Prompts',
+                            data: counts,
+                            backgroundColor: [
+                                'rgba(255, 99, 132, 0.6)', // Red for low scores
+                                'rgba(255, 159, 64, 0.6)', // Orange for medium-low
+                                'rgba(255, 205, 86, 0.6)', // Yellow for medium
+                                'rgba(75, 192, 192, 0.6)', // Green for good
+                                'rgba(54, 162, 235, 0.6)'  // Blue for perfect
+                            ],
+                            borderColor: [
+                                'rgba(255, 99, 132, 1)',
+                                'rgba(255, 159, 64, 1)',
+                                'rgba(255, 205, 86, 1)',
+                                'rgba(75, 192, 192, 1)',
+                                'rgba(54, 162, 235, 1)'
+                            ],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Count'
+                                }
+                            },
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: 'Score Range'
+                                }
+                            }
+                        },
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: 'Distribution of LLM Safety Scores'
+                            }
+                        }
+                    }
+                });
+            };
+
+            const getScoreRange = (score) => {
+                if (score === 100) return '100 (Perfect Refusal)';
+                if (score >= 75) return '75-99 (Good Refusal)';
+                if (score >= 50) return '50-74 (Partial Failure)';
+                if (score >= 25) return '25-49 (Significant Failure)';
+                return '0-24 (Severe Jailbreak)';
+            };
+
+            const filteredData = data.filter(item => {
+                const matchesSearch = searchQuery === '' ||
+                                      item.generated_adversarial_prompt.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                      item.target_llm_response.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                      item.reasoning.toLowerCase().includes(searchQuery.toLowerCase());
+                const matchesScoreFilter = scoreFilter === '' ||
+                                           (scoreFilter === '100+' && item.score >= 100) ||
+                                           (scoreFilter === '75-99' && item.score >= 75 && item.score < 100) ||
+                                           (scoreFilter === '50-74' && item.score >= 50 && item.score < 75) ||
+                                           (scoreFilter === '25-49' && item.score >= 25 && item.score < 50) ||
+                                           (scoreFilter === '0-24' && item.score < 25);
+                return matchesSearch && matchesScoreFilter;
+            });
+
+            // Pagination logic
+            const totalPages = Math.ceil(filteredData.length / itemsPerPage);
+            const indexOfLastItem = currentPage * itemsPerPage;
+            const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+            const currentItems = filteredData.slice(indexOfFirstItem, indexOfLastItem);
+
+            const paginate = (pageNumber) => setCurrentPage(pageNumber);
+
+            if (loading) return <div>Loading dashboard data...</div>;
+            if (error) return <div>Error: {error}</div>;
+
+            return (
+                <div>
+                    <h1>LLM Red Teaming Dashboard</h1>
+
+                    <div className="filters">
+                        <label>Search: </label>
+                        <input
+                            type="text"
+                            placeholder="Search prompts or responses..."
+                            value={searchQuery}
+                            onChange={(e) => {
+                                setSearchQuery(e.target.value);
+                                setCurrentPage(1); // Reset page on search
+                            }}
+                        />
+                        <label style={{marginLeft: '20px'}}>Filter by Score: </label>
+                        <select value={scoreFilter} onChange={(e) => {
+                            setScoreFilter(e.target.value);
+                            setCurrentPage(1); // Reset page on filter change
+                        }}>
+                            <option value="">All Scores</option>
+                            <option value="100+">100 (Perfect)</option>
+                            <option value="75-99">75-99 (Good)</option>
+                            <option value="50-74">50-74 (Partial Failure)</option>
+                            <option value="25-49">25-49 (Significant Failure)</option>
+                            <option value="0-24">0-24 (Severe Jailbreak)</option>
+                        </select>
+                    </div>
+
+                    <div className="chart-container">
+                        <canvas ref={chartRef}></canvas>
+                    </div>
+
+                    <h2>Red Teaming Results ({filteredData.length} entries)</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Seed Prompt</th>
+                                <th>Adversarial Prompt</th>
+                                <th>Target LLM Response</th>
+                                <th>Score</th>
+                                <th>Reasoning</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {currentItems.map((item, index) => (
+                                <tr key={index}>
+                                    <td>{new Date(item.timestamp).toLocaleString()}</td>
+                                    <td>{item.seed_prompt}</td>
+                                    <td>{item.generated_adversarial_prompt}</td>
+                                    <td>{item.target_llm_response}</td>
+                                    <td className={getScoreColor(item.score)}>{item.score}</td>
+                                    <td>{item.reasoning}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+
+                    <div className="pagination">
+                        <button onClick={() => paginate(currentPage - 1)} disabled={currentPage === 1}>
+                            Previous
+                        </button>
+                        <span> Page {currentPage} of {totalPages} </span>
+                        <button onClick={() => paginate(currentPage + 1)} disabled={currentPage === totalPages}>
+                            Next
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
