@@ -1,16 +1,24 @@
-# Virtual environment
+# Python virtual environments
 venv/
+myenv/      # Added based on your screenshot (you have 'myenv' folder)
+numpy-1.25.2/ # Added based on your screenshot (you have 'numpy-1.25.2' folder, likely installed within a venv)
 
-# Environment variables
+# Environment variables file (contains API keys)
 .env
 
-# Python bytecode
+# Python bytecode and compilation artifacts
 __pycache__/
 *.pyc
 
-# Generated data/logs
+# Generated data files
 red_teaming_campaign_results.csv
 
-# OS generated files
+# Operating System specific files
 .DS_Store
 Thumbs.db
+
+# IDE specific files (if you use an IDE like VS Code, PyCharm, etc.)
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
